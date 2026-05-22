@@ -635,14 +635,7 @@ public static class IDictionaryExtensions
     /// <param name="keySelector">键选择器</param>
     public static NullableDictionary<TKey, TSource> ToDictionarySafety<TSource, TKey>(this IEnumerable<TSource> source, Func<TSource, TKey> keySelector)
     {
-        var items = source as IList<TSource> ?? source.ToList();
-        var dic = new NullableDictionary<TKey, TSource>(items.Count);
-        foreach (var item in items)
-        {
-            dic[keySelector(item)] = item;
-        }
-
-        return dic;
+        return source.GroupBy(keySelector).ToDictionary(g => g.Key,g => g.First());
     }
 
     /// <summary>
@@ -662,7 +655,7 @@ public static class IDictionaryExtensions
         };
         foreach (var item in items)
         {
-            dic[keySelector(item)] = item;
+            dic.TryAdd(keySelector(item), item);
         }
 
         return dic;
@@ -683,7 +676,7 @@ public static class IDictionaryExtensions
         var dic = new NullableDictionary<TKey, TElement>(items.Count);
         foreach (var item in items)
         {
-            dic[keySelector(item)] = elementSelector(item);
+            dic.TryAdd(keySelector(item), elementSelector(item));
         }
 
         return dic;
@@ -708,7 +701,7 @@ public static class IDictionaryExtensions
         };
         foreach (var item in items)
         {
-            dic[keySelector(item)] = elementSelector(item);
+            dic.TryAdd(keySelector(item), elementSelector(item));
         }
 
         return dic;
@@ -727,7 +720,7 @@ public static class IDictionaryExtensions
     {
         var items = source as IList<TSource> ?? source.ToList();
         var dic = new NullableDictionary<TKey, TElement>(items.Count);
-        await items.ForeachAsync(async item => dic[keySelector(item)] = await elementSelector(item), cancellationToken: cancellationToken);
+        await items.ForeachAsync(async item => dic.TryAdd(keySelector(item), await elementSelector(item)), cancellationToken: cancellationToken);
         return dic;
     }
 
@@ -748,7 +741,7 @@ public static class IDictionaryExtensions
         {
             FallbackValue = defaultValue
         };
-        await items.ForeachAsync(async item => dic[keySelector(item)] = await elementSelector(item), cancellationToken: cancellationToken);
+        await items.ForeachAsync(async item => dic.TryAdd(keySelector(item), await elementSelector(item)), cancellationToken: cancellationToken);
         return dic;
     }
 
@@ -765,7 +758,7 @@ public static class IDictionaryExtensions
         var dic = new DisposableDictionary<TKey, TSource>(items.Count);
         foreach (var item in items)
         {
-            dic[keySelector(item)] = item;
+            dic.TryAdd(keySelector(item), item);
         }
 
         return dic;
@@ -788,7 +781,7 @@ public static class IDictionaryExtensions
         };
         foreach (var item in items)
         {
-            dic[keySelector(item)] = item;
+            dic.TryAdd(keySelector(item), item);
         }
 
         return dic;
@@ -809,7 +802,7 @@ public static class IDictionaryExtensions
         var dic = new DisposableDictionary<TKey, TElement>(items.Count);
         foreach (var item in items)
         {
-            dic[keySelector(item)] = elementSelector(item);
+            dic.TryAdd(keySelector(item), elementSelector(item));
         }
 
         return dic;
@@ -834,7 +827,7 @@ public static class IDictionaryExtensions
         };
         foreach (var item in items)
         {
-            dic[keySelector(item)] = elementSelector(item);
+            dic.TryAdd(keySelector(item), elementSelector(item));
         }
 
         return dic;
@@ -853,7 +846,7 @@ public static class IDictionaryExtensions
     {
         var items = source as IList<TSource> ?? source.ToList();
         var dic = new DisposableDictionary<TKey, TElement>(items.Count);
-        await items.ForeachAsync(async item => dic[keySelector(item)] = await elementSelector(item), cancellationToken: cancellationToken);
+        await items.ForeachAsync(async item => dic.TryAdd(keySelector(item), await elementSelector(item)), cancellationToken: cancellationToken);
         return dic;
     }
 
@@ -874,7 +867,7 @@ public static class IDictionaryExtensions
         {
             FallbackValue = defaultValue
         };
-        await items.ForeachAsync(async item => dic[keySelector(item)] = await elementSelector(item), cancellationToken: cancellationToken);
+        await items.ForeachAsync(async item => dic.TryAdd(keySelector(item), await elementSelector(item)), cancellationToken: cancellationToken);
         return dic;
     }
 
@@ -890,7 +883,7 @@ public static class IDictionaryExtensions
         var dic = new NullableConcurrentDictionary<TKey, TSource>();
         foreach (var item in source)
         {
-            dic[keySelector(item)] = item;
+            dic.TryAdd(keySelector(item), item);
         }
 
         return dic;
@@ -912,7 +905,7 @@ public static class IDictionaryExtensions
         };
         foreach (var item in source)
         {
-            dic[keySelector(item)] = item;
+            dic.TryAdd(keySelector(item), item);
         }
 
         return dic;
@@ -932,7 +925,7 @@ public static class IDictionaryExtensions
         var dic = new NullableConcurrentDictionary<TKey, TElement>();
         foreach (var item in source)
         {
-            dic[keySelector(item)] = elementSelector(item);
+            dic.TryAdd(keySelector(item), elementSelector(item));
         }
 
         return dic;
@@ -956,7 +949,7 @@ public static class IDictionaryExtensions
         };
         foreach (var item in source)
         {
-            dic[keySelector(item)] = elementSelector(item);
+            dic.TryAdd(keySelector(item), elementSelector(item));
         }
 
         return dic;
@@ -974,7 +967,7 @@ public static class IDictionaryExtensions
     public static async Task<NullableConcurrentDictionary<TKey, TElement>> ToConcurrentDictionaryAsync<TSource, TKey, TElement>(this IEnumerable<TSource> source, Func<TSource, TKey> keySelector, Func<TSource, Task<TElement>> elementSelector, CancellationToken cancellationToken = default)
     {
         var dic = new ConcurrentDictionary<TKey, TElement>();
-        await source.ForeachAsync(async item => dic[keySelector(item)] = await elementSelector(item), cancellationToken: cancellationToken);
+        await source.ForeachAsync(async item => dic.TryAdd(keySelector(item), await elementSelector(item)), cancellationToken: cancellationToken);
         return dic;
     }
 
@@ -994,7 +987,7 @@ public static class IDictionaryExtensions
         {
             FallbackValue = defaultValue
         };
-        await source.ForeachAsync(async item => dic[keySelector(item)] = await elementSelector(item), cancellationToken: cancellationToken);
+        await source.ForeachAsync(async item => dic.TryAdd(keySelector(item), await elementSelector(item)), cancellationToken: cancellationToken);
         return dic;
     }
 
@@ -1010,7 +1003,7 @@ public static class IDictionaryExtensions
         var dic = new DisposableConcurrentDictionary<TKey, TSource>();
         foreach (var item in source)
         {
-            dic[keySelector(item)] = item;
+            dic.TryAdd(keySelector(item), item);
         }
 
         return dic;
@@ -1030,7 +1023,7 @@ public static class IDictionaryExtensions
         };
         foreach (var item in source)
         {
-            dic[keySelector(item)] = item;
+            dic.TryAdd(keySelector(item), item);
         }
 
         return dic;
@@ -1047,7 +1040,7 @@ public static class IDictionaryExtensions
         var dic = new DisposableConcurrentDictionary<TKey, TElement>();
         foreach (var item in source)
         {
-            dic[keySelector(item)] = elementSelector(item);
+            dic.TryAdd(keySelector(item), elementSelector(item));
         }
 
         return dic;
@@ -1068,7 +1061,7 @@ public static class IDictionaryExtensions
         };
         foreach (var item in source)
         {
-            dic[keySelector(item)] = elementSelector(item);
+            dic.TryAdd(keySelector(item), elementSelector(item));
         }
 
         return dic;
@@ -1083,7 +1076,7 @@ public static class IDictionaryExtensions
     public static async Task<DisposableConcurrentDictionary<TKey, TElement>> ToDisposableConcurrentDictionaryAsync<TSource, TKey, TElement>(this IEnumerable<TSource> source, Func<TSource, TKey> keySelector, Func<TSource, Task<TElement>> elementSelector, CancellationToken cancellationToken = default) where TElement : IDisposable
     {
         var dic = new DisposableConcurrentDictionary<TKey, TElement>();
-        await source.ForeachAsync(async item => dic[keySelector(item)] = await elementSelector(item), cancellationToken: cancellationToken);
+        await source.ForeachAsync(async item => dic.TryAdd(keySelector(item), await elementSelector(item)), cancellationToken: cancellationToken);
         return dic;
     }
 
@@ -1100,7 +1093,7 @@ public static class IDictionaryExtensions
         {
             FallbackValue = defaultValue
         };
-        await source.ForeachAsync(async item => dic[keySelector(item)] = await elementSelector(item), cancellationToken: cancellationToken);
+        await source.ForeachAsync(async item => dic.TryAdd(keySelector(item), await elementSelector(item)), cancellationToken: cancellationToken);
         return dic;
     }
 
