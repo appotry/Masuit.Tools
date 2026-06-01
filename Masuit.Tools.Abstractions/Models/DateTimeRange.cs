@@ -12,10 +12,10 @@ public class DateTimeRange : ITimePeriod
 {
     public DateTimeRange(DateTime? start, DateTime? end)
     {
-        if (start > end)
-        {
-            throw new Exception("开始时间不能大于结束时间");
-        }
+        //if (start > end)
+        //{
+        //    throw new Exception("开始时间不能大于结束时间");
+        //}
 
         Start = start;
         End = end;
