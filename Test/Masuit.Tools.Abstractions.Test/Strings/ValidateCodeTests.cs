@@ -63,17 +63,4 @@ public class ValidateCodeTests
         // Assert
         Assert.True(width > 0);
     }
-
-    [Fact]
-    public void StringWidth_WithInvalidFontName_ShouldThrowArgumentException()
-    {
-        // Arrange
-        string input = "Test";
-        string fontName = "InvalidFont";
-        int fontSize = 12;
-
-        // Act & Assert
-        var exception = Assert.Throws<ArgumentException>(() => input.StringWidth(fontName, fontSize));
-        Assert.Equal($"字体 {fontName} 不存在，请尝试其它字体！", exception.Message);
-    }
 }

@@ -771,7 +771,7 @@ new Email()
 ```csharp
 "base64".SaveDataUriAsImageFile();// 将Base64编码转换成图片
 
-using Image image = Image.Load(@"D:\1.jpg");
+using var image = SKBitmap.Decode(@"D:\1.jpg");
 image.MakeThumbnail(@"D:\2.jpg", 120, 80,ResizeMode.BoxPad);//生成缩略图
 
 var newBmp = image.BWPic(image.Width, image.Height);//转换成黑白
@@ -784,7 +784,7 @@ var newBmp =image.LDPic(10); //调整光暗
 var newBmp =image.RePic(); //反色处理
 var newBmp =image.Relief(); //浮雕处理
 
-var gif = Image.Load(@"D:\1.gif");
+var gif = SKBitmap.Decode(@"D:\1.gif");
 gif.GetFrames(@"D:\frames\"); // 解压gif每帧图片
 
 var marker=ImageWatermarker(stream);
@@ -1212,7 +1212,7 @@ var stream=list.Select(item=>new{
     姓名=item.Name,
     年龄=item.Age,
     item.Gender,
-    Avatar=Image.FromStream(filestream) //图片列
+    Avatar=filestream //图片列
 }).ToDataTable().ToExcel("Sheet1"); //自定义列名导出
 var stream=list.ToDataTable("Sheet1").ToExcel("文件密码");
 ```

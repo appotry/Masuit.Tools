@@ -1,4 +1,4 @@
-﻿using SixLabors.ImageSharp.PixelFormats;
+﻿using SkiaSharp;
 
 namespace Masuit.Tools.Media;
 
@@ -36,7 +36,7 @@ public struct BorderDetectionResult
     public int BorderLayers { get; set; }
 
     /// <summary>边框颜色层次（从外到内）</summary>
-    public List<Rgba32> BorderColors { get; set; }
+    public List<SKColor> BorderColors { get; set; }
 
     /// <summary>顶部边框总宽度（像素）</summary>
     public int TopBorderWidth => ContentTop;

@@ -1,11 +1,4 @@
 ﻿using Masuit.Tools.Systems;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Bmp;
-using SixLabors.ImageSharp.Formats.Gif;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.Formats.Tiff;
-using SixLabors.ImageSharp.Formats.Webp;
 using System.IO;
 using System.IO.Compression;
 using System.Xml;
@@ -26,28 +19,35 @@ public static class ImageDetectExt
     }
 
     /// <summary>
-    /// 获取图像格式
+    /// 获取图像格式（通过魔法字节检测）
     /// </summary>
-    /// <param name="ms"></param>
-    /// <returns></returns>
     public static ImageFormat? GetImageType(this Stream ms)
     {
         ms.Seek(0, SeekOrigin.Begin);
-        var pictureType = Image.DetectFormat(ms) switch
-        {
-            BmpFormat => ImageFormat.Bmp,
-            GifFormat => ImageFormat.Gif,
-            JpegFormat => ImageFormat.Jpg,
-            PngFormat => ImageFormat.Png,
-            TiffFormat => ImageFormat.Tif,
-            WebpFormat => ImageFormat.WebP,
-            _ => new ImageFormat?()
-        };
-        if (pictureType.HasValue)
-        {
-            ms.Seek(0, SeekOrigin.Begin);
-            return pictureType;
-        }
+        var header = new byte[16];
+        int read = ms.Read(header, 0, header.Length);
+        ms.Seek(0, SeekOrigin.Begin);
+
+        if (read >= 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF)
+            return ImageFormat.Jpg;
+
+        if (read >= 8 && header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47
+            && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A)
+            return ImageFormat.Png;
+
+        if (read >= 4 && header[0] == 0x47 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x38)
+            return ImageFormat.Gif;
+
+        if (read >= 2 && header[0] == 0x42 && header[1] == 0x4D)
+            return ImageFormat.Bmp;
+
+        if (read >= 4 && ((header[0] == 0x49 && header[1] == 0x49 && header[2] == 0x2A && header[3] == 0x00)
+                          || (header[0] == 0x4D && header[1] == 0x4D && header[2] == 0x00 && header[3] == 0x2A)))
+            return ImageFormat.Tif;
+
+        if (read >= 12 && header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46
+            && header[8] == 0x57 && header[9] == 0x45 && header[10] == 0x42 && header[11] == 0x50)
+            return ImageFormat.WebP;
 
         var br = new BinaryReader(ms);
         if (IsIco(br))
@@ -111,26 +111,14 @@ public static class ImageDetectExt
                 do
                 {
                     size = z.Read(buffer, 0, bufferSize);
-                    if (size > 0)
-                    {
-                        msOut.Write(buffer, 0, size);
-                    }
+                    if (size > 0) msOut.Write(buffer, 0, size);
                 } while (size == bufferSize);
 
                 msOut.Position = 0;
                 var br = new BinaryReader(msOut);
-                if (IsEmf(br))
-                {
-                    type = ImageFormat.Emf;
-                }
-                else if (IsWmf(br))
-                {
-                    type = ImageFormat.Wmf;
-                }
-                else
-                {
-                    type = null;
-                }
+                if (IsEmf(br)) type = ImageFormat.Emf;
+                else if (IsWmf(br)) type = ImageFormat.Wmf;
+                else type = null;
 
                 msOut.Position = 0;
                 return msOut.ToArray();
@@ -146,8 +134,6 @@ public static class ImageDetectExt
         return img;
     }
 
-    #region Ico
-
     internal static bool IsIco(BinaryReader br)
     {
         br.BaseStream.Seek(0, SeekOrigin.Begin);
@@ -156,10 +142,6 @@ public static class ImageDetectExt
         return type0 == 0 && type1 == 1;
     }
 
-    #endregion Ico
-
-    #region Emf
-
     private static bool IsEmf(BinaryReader br)
     {
         br.BaseStream.Position = 0;
@@ -167,20 +149,12 @@ public static class ImageDetectExt
         return type == 1;
     }
 
-    #endregion Emf
-
-    #region Wmf
-
     private static bool IsWmf(BinaryReader br)
     {
         br.BaseStream.Position = 0;
         var key = br.ReadUInt32();
         return key == 0x9AC6CDD7;
     }
-
-    #endregion Wmf
-
-    #region Svg
 
     private static bool IsSvg(Stream ms)
     {
@@ -190,12 +164,9 @@ public static class ImageDetectExt
             var reader = new XmlTextReader(ms);
             while (reader.Read())
             {
-                if (reader.LocalName == "svg" && reader.NodeType == XmlNodeType.Element)
-                {
+                if (reader.LocalName == "svg" && reader.NodeType == System.Xml.XmlNodeType.Element)
                     return true;
-                }
             }
-
             return false;
         }
         catch
@@ -203,6 +174,4 @@ public static class ImageDetectExt
             return false;
         }
     }
-
-    #endregion Svg
 }

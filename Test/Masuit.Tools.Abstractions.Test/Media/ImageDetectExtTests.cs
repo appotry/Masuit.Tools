@@ -1,21 +1,30 @@
 ﻿using System.IO;
 using System.IO.Compression;
 using Masuit.Tools.Media;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 using Xunit;
 
 namespace Masuit.Tools.Abstractions.Test.Media;
 
 public class ImageDetectExtTests
 {
+    private static MemoryStream CreateJpegStream()
+    {
+        using var bitmap = new SKBitmap(1, 1);
+        var ms = new MemoryStream();
+        using var data = bitmap.Encode(SKEncodedImageFormat.Jpeg, 90);
+        data.SaveTo(ms);
+        ms.Seek(0, SeekOrigin.Begin);
+        return ms;
+    }
+
     [Fact]
     public void IsImage_ShouldReturnTrueForValidImageFile()
     {
         var filePath = Path.Combine(Directory.GetCurrentDirectory(), "test.jpg");
-        using var image = new Image<Rgba32>(1, 1);
-        image.Save(filePath);
+        using var bitmap = new SKBitmap(1, 1);
+        using (var data = bitmap.Encode(SKEncodedImageFormat.Jpeg, 90))
+        using (var fs = File.OpenWrite(filePath)) data.SaveTo(fs);
 
         var fileInfo = new FileInfo(filePath);
         var result = fileInfo.IsImage();
@@ -27,13 +36,8 @@ public class ImageDetectExtTests
     [Fact]
     public void IsImage_ShouldReturnTrueForValidImageStream()
     {
-        using var ms = new MemoryStream();
-        using var image = new Image<Rgba32>(1, 1);
-        image.Save(ms, new JpegEncoder());
-        ms.Seek(0, SeekOrigin.Begin);
-
+        using var ms = CreateJpegStream();
         var result = ms.IsImage();
-
         Assert.True(result);
     }
 
@@ -46,19 +50,15 @@ public class ImageDetectExtTests
         writer.Flush();
         ms.Seek(0, SeekOrigin.Begin);
 
-        Assert.Throws<UnknownImageFormatException>(() => ms.IsImage());
+        var result = ms.IsImage();
+        Assert.False(result);
     }
 
     [Fact]
     public void GetImageType_ShouldReturnCorrectImageFormat()
     {
-        using var ms = new MemoryStream();
-        using var image = new Image<Rgba32>(1, 1);
-        image.Save(ms, new JpegEncoder());
-        ms.Seek(0, SeekOrigin.Begin);
-
+        using var ms = CreateJpegStream();
         var result = ms.GetImageType();
-
         Assert.Equal(ImageFormat.Jpg, result);
     }
 
@@ -71,6 +71,7 @@ public class ImageDetectExtTests
         writer.Flush();
         ms.Seek(0, SeekOrigin.Begin);
 
-        Assert.Throws<UnknownImageFormatException>(() => ms.GetImageType());
+        var result = ms.GetImageType();
+        Assert.Null(result);
     }
 }

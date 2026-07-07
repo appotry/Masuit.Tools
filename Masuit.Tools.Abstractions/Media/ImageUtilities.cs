@@ -1,9 +1,7 @@
 ﻿using Masuit.Tools.Systems;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
-using SixLabors.ImageSharp.Processing.Processors.Transforms;
+using SkiaSharp;
 using System;
+using System.IO;
 
 namespace Masuit.Tools.Media
 {
@@ -14,330 +12,353 @@ namespace Masuit.Tools.Media
     {
         #region 判断文件类型是否为WEB格式图片
 
-        /// <summary>
-        /// 判断文件类型是否为WEB格式图片
-        /// (注：JPG,GIF,BMP,PNG)
-        /// </summary>
-        /// <param name="contentType">HttpPostedFile.ContentType</param>
-        /// <returns>是否为WEB格式图片</returns>
         public static bool IsWebImage(string contentType)
         {
             return contentType == "image/pjpeg" || contentType == "image/jpeg" || contentType == "image/gif" || contentType == "image/bmpp" || contentType == "image/png";
         }
 
-        #endregion 判断文件类型是否为WEB格式图片
+        #endregion
 
         #region 裁剪图片
 
-        /// <summary>
-        /// 裁剪图片 -- 用GDI+
-        /// </summary>
-        /// <param name="b">原始Bitmap</param>
-        /// <param name="rec">裁剪区域</param>
-        /// <returns>剪裁后的Bitmap</returns>
-        public static Image CutImage(this Image b, Rectangle rec)
+        public static SKBitmap CutImage(this SKBitmap b, SKRectI rec)
         {
-            b.Mutate(c => c.Crop(rec));
-            return b;
+            var result = new SKBitmap(rec.Width, rec.Height);
+            using var canvas = new SKCanvas(result);
+            canvas.DrawBitmap(b, rec, new SKRect(0, 0, rec.Width, rec.Height), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+            return result;
         }
 
-        #endregion 裁剪图片
+        #endregion
 
         #region 裁剪并缩放
 
-        /// <summary>
-        /// 裁剪并缩放
-        /// </summary>
-        /// <param name="bmpp">原始图片</param>
-        /// <param name="rec">裁剪的矩形区域</param>
-        /// <param name="newWidth">新的宽度</param>
-        /// <param name="newHeight">新的高度</param>
-        /// <returns>处理以后的图片</returns>
-        public static Image CutAndResize(this Image bmpp, Rectangle rec, int newWidth, int newHeight)
+        public static SKBitmap CutAndResize(this SKBitmap bmpp, SKRectI rec, int newWidth, int newHeight)
         {
-            bmpp.Mutate(c => c.Crop(rec).Resize(newWidth, newHeight));
-            return bmpp;
+            using var cropped = bmpp.CutImage(rec);
+            return cropped.Resize(new SKImageInfo(newWidth, newHeight), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
         }
 
-        #endregion 裁剪并缩放
+        #endregion
 
         #region 缩略图
 
-        /// <summary>
-        /// 生成缩略图
-        /// </summary>
-        /// <param name="originalImage">原图</param>
-        /// <param name="thumbnailPath">缩略图路径（物理路径）</param>
-        /// <param name="width">缩略图宽度</param>
-        /// <param name="height">缩略图高度</param>
-        /// <param name="mode">生成缩略图的方式</param>
-        public static void MakeThumbnail(this Image originalImage, string thumbnailPath, int width, int height, ResizeMode mode)
+        public static void MakeThumbnail(this SKBitmap originalImage, string thumbnailPath, int width, int height, ResizeMode mode)
         {
-            using var image = originalImage.Clone(c => c.Resize(new ResizeOptions()
-            {
-                Size = new Size(width, height),
-                Mode = mode
-            }));
-            image.Save(thumbnailPath);
+            using var thumbnail = originalImage.MakeThumbnail(width, height, mode);
+            using var data = thumbnail.Encode(SKEncodedImageFormat.Jpeg, 90);
+            using var fs = File.OpenWrite(thumbnailPath);
+            data.SaveTo(fs);
         }
 
-        /// <summary>
-        /// 生成缩略图
-        /// </summary>
-        /// <param name="originalImage">原图</param>
-        /// <param name="width">缩略图宽度</param>
-        /// <param name="height">缩略图高度</param>
-        /// <param name="mode">生成缩略图的方式</param>
-        public static Image MakeThumbnail(this Image originalImage, int width, int height, ResizeMode mode)
+        public static SKBitmap MakeThumbnail(this SKBitmap originalImage, int width, int height, ResizeMode mode)
         {
-            return originalImage.Clone(c => c.Resize(new ResizeOptions()
+            int srcW = originalImage.Width;
+            int srcH = originalImage.Height;
+            int dstW = width;
+            int dstH = height;
+
+            switch (mode)
             {
-                Size = new Size(width, height),
-                Mode = mode
-            }));
+                case ResizeMode.Stretch:
+                    break;
+                case ResizeMode.Crop:
+                {
+                    float ratioW = (float)width / srcW;
+                    float ratioH = (float)height / srcH;
+                    float ratio = Math.Max(ratioW, ratioH);
+                    int scaledW = (int)(srcW * ratio);
+                    int scaledH = (int)(srcH * ratio);
+                    using var scaled = originalImage.Resize(new SKImageInfo(scaledW, scaledH), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+                    int cropX = (scaledW - width) / 2;
+                    int cropY = (scaledH - height) / 2;
+                    return scaled.CutImage(new SKRectI(cropX, cropY, cropX + width, cropY + height));
+                }
+                case ResizeMode.Min:
+                {
+                    float ratio = Math.Min((float)width / srcW, (float)height / srcH);
+                    dstW = (int)(srcW * ratio);
+                    dstH = (int)(srcH * ratio);
+                    break;
+                }
+                case ResizeMode.Max:
+                {
+                    float ratio = Math.Max((float)width / srcW, (float)height / srcH);
+                    dstW = (int)(srcW * ratio);
+                    dstH = (int)(srcH * ratio);
+                    break;
+                }
+                case ResizeMode.Pad:
+                {
+                    float ratio = Math.Min((float)width / srcW, (float)height / srcH);
+                    int scaledW = (int)(srcW * ratio);
+                    int scaledH = (int)(srcH * ratio);
+                    var padded = new SKBitmap(width, height);
+                    using var canvas = new SKCanvas(padded);
+                    canvas.Clear(SKColors.White);
+                    using var scaled = originalImage.Resize(new SKImageInfo(scaledW, scaledH), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+                    canvas.DrawBitmap(scaled, (width - scaledW) / 2f, (height - scaledH) / 2f, new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+                    return padded;
+                }
+                case ResizeMode.BoxPad:
+                {
+                    float ratio = Math.Min((float)width / srcW, (float)height / srcH);
+                    int scaledW = (int)(srcW * ratio);
+                    int scaledH = (int)(srcH * ratio);
+                    var padded = new SKBitmap(width, height);
+                    using var canvas = new SKCanvas(padded);
+                    canvas.Clear(SKColors.Transparent);
+                    using var scaled = originalImage.Resize(new SKImageInfo(scaledW, scaledH), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+                    canvas.DrawBitmap(scaled, (width - scaledW) / 2f, (height - scaledH) / 2f,new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+                    return padded;
+                }
+            }
+
+            return originalImage.Resize(new SKImageInfo(dstW, dstH), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
         }
 
-        #endregion 缩略图
+        #endregion
 
         #region 调整光暗
 
-        /// <summary>
-        /// 调整光暗
-        /// </summary>
-        /// <param name="source">原始图片</param>
-        /// <param name="val">增加或减少的光暗值</param>
-        public static Image LDPic(this Image source, int val)
+        public static SKBitmap LDPic(this SKBitmap source, int val)
         {
-            var copy = source.CloneAs<Rgba32>();
+            var copy = source.Copy();
             for (var x = 0; x < copy.Width; x++)
             {
                 for (var y = 0; y < copy.Height; y++)
                 {
-                    var pixel = copy[x, y];
-                    var resultR = pixel.R + val; //x、y是循环次数，后面三个是记录红绿蓝三个值的
-                    var resultG = pixel.G + val; //x、y是循环次数，后面三个是记录红绿蓝三个值的
-                    var resultB = pixel.B + val; //x、y是循环次数，后面三个是记录红绿蓝三个值的
-                    copy[x, y] = new Rgba32(resultR, resultG, resultB);
+                    var pixel = copy.GetPixel(x, y);
+                    var r = Clamp(pixel.Red + val);
+                    var g = Clamp(pixel.Green + val);
+                    var b = Clamp(pixel.Blue + val);
+                    copy.SetPixel(x, y, new SKColor(r, g, b, pixel.Alpha));
                 }
             }
-
             return copy;
         }
 
-        #endregion 调整光暗
+        #endregion
 
         #region 反色处理
 
-        /// <summary>
-        /// 反色处理
-        /// </summary>
-        /// <param name="source">原始图片</param>
-        public static Image RePic(this Image source)
+        public static SKBitmap RePic(this SKBitmap source)
         {
-            var copy = source.CloneAs<Rgba32>();
+            var copy = source.Copy();
             for (var x = 0; x < copy.Width; x++)
             {
                 for (var y = 0; y < copy.Height; y++)
                 {
-                    var pixel = copy[x, y];
-                    var resultR = 255 - pixel.R;
-                    var resultG = 255 - pixel.G;
-                    var resultB = 255 - pixel.B;
-                    copy[x, y] = new Rgba32(resultR, resultG, resultB);
+                    var pixel = copy.GetPixel(x, y);
+                    copy.SetPixel(x, y, new SKColor((byte)(255 - pixel.Red), (byte)(255 - pixel.Green), (byte)(255 - pixel.Blue), pixel.Alpha));
                 }
             }
-
             return copy;
         }
 
-        #endregion 反色处理
+        #endregion
 
         #region 浮雕处理
 
-        /// <summary>
-        /// 浮雕处理
-        /// </summary>
-        /// <param name="oldBitmap">原始图片</param>
-        public static Image Relief(this Image oldBitmap)
+        public static SKBitmap Relief(this SKBitmap oldBitmap)
         {
-            var copy = oldBitmap.CloneAs<Rgba32>();
+            var copy = oldBitmap.Copy();
             for (int x = 0; x < copy.Width - 1; x++)
             {
                 for (int y = 0; y < copy.Height - 1; y++)
                 {
-                    var color1 = copy[x, y];
-                    var color2 = copy[x + 1, y + 1];
-                    var r = Math.Abs(color1.R - color2.R + 128);
-                    var g = Math.Abs(color1.G - color2.G + 128);
-                    var b = Math.Abs(color1.B - color2.B + 128);
-                    if (r > 255) r = 255;
-                    if (r < 0) r = 0;
-                    if (g > 255) g = 255;
-                    if (g < 0) g = 0;
-                    if (b > 255) b = 255;
-                    if (b < 0) b = 0;
-                    copy[x, y] = new Rgba32(r, b, b);
+                    var color1 = copy.GetPixel(x, y);
+                    var color2 = copy.GetPixel(x + 1, y + 1);
+                    var r = Clamp(Math.Abs(color1.Red - color2.Red + 128));
+                    var g = Clamp(Math.Abs(color1.Green - color2.Green + 128));
+                    var b = Clamp(Math.Abs(color1.Blue - color2.Blue + 128));
+                    copy.SetPixel(x, y, new SKColor(r, g, b));
                 }
             }
-
             return copy;
         }
 
-        #endregion 浮雕处理
+        #endregion
 
         #region 拉伸图片
 
-        /// <summary>
-        /// 拉伸图片
-        /// </summary>
-        /// <param name="image">原始图片</param>
-        /// <param name="newW">新的宽度</param>
-        /// <param name="newH">新的高度</param>
-        public static Image ResizeImage(this Image image, int newW, int newH)
+        public static SKBitmap ResizeImage(this SKBitmap image, int newW, int newH)
         {
-            image.Mutate(c => c.Resize(new ResizeOptions()
-            {
-                Size = new Size(newW, newH),
-                Sampler = new BicubicResampler(),
-                Mode = ResizeMode.Stretch
-            }));
-            return image;
+            return image.Resize(new SKImageInfo(newW, newH), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
         }
 
-        #endregion 拉伸图片
+        #endregion
 
         #region 滤色处理
 
-        /// <summary>
-        /// 滤色处理
-        /// </summary>
-        /// <param name="source">原始图片</param>
-        public static Image FilPic(this Image source)
+        public static SKBitmap FilPic(this SKBitmap source)
         {
-            var copy = source.CloneAs<Rgba32>();
+            var copy = source.Copy();
             for (var x = 0; x < copy.Width; x++)
             {
                 for (var y = 0; y < copy.Height; y++)
                 {
-                    copy[x, y] = new Rgba32(0, copy[x, y].G, copy[x, y].B);
+                    var pixel = copy.GetPixel(x, y);
+                    copy.SetPixel(x, y, new SKColor(0, pixel.Green, pixel.Blue));
                 }
             }
-
             return copy;
         }
 
-        #endregion 滤色处理
-
-        #region 左右翻转
+        #endregion
 
         /// <summary>
-        /// 左右翻转
+        /// 旋转图片
         /// </summary>
-        /// <param name="source">原始图片</param>
-        public static Image RevPicLR(this Image source)
+        /// <param name="source"></param>
+        /// <param name="degrees">角度</param>
+        /// <returns></returns>
+        public static SKBitmap Rotate(this SKBitmap source, float degrees)
         {
-            source.Mutate(c => c.Flip(FlipMode.Horizontal));
-            return source;
+            var rightAngle = ((int)degrees % 360 + 360) % 360;
+            int dstWidth;
+            int dstHeight;
+            if (rightAngle == 90 || rightAngle == 270)
+            {
+                dstWidth = source.Height;
+                dstHeight = source.Width;
+            }
+            else
+            {
+                dstWidth = source.Width;
+                dstHeight = source.Height;
+            }
+
+            var dest = new SKBitmap(dstWidth, dstHeight, source.ColorType, source.AlphaType);
+            using var canvas = new SKCanvas(dest);
+            canvas.Clear(SKColors.Transparent);
+            canvas.Translate(dstWidth / 2f, dstHeight / 2f);
+            canvas.RotateDegrees(degrees);
+            canvas.Translate(-source.Width / 2f, -source.Height / 2f);
+            canvas.DrawBitmap(source, 0, 0, new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+            return dest;
         }
-
-        #endregion 左右翻转
-
-        #region 上下翻转
 
         /// <summary>
-        /// 上下翻转
+        /// 水平翻转图片
         /// </summary>
-        /// <param name="source">原始图片</param>
-        public static Image RevPicUD(this Image source)
+        /// <param name="source"></param>
+        /// <returns></returns>
+        public static SKBitmap FlipHorizontal(this SKBitmap source)
         {
-            source.Mutate(c => c.Flip(FlipMode.Vertical));
-            return source;
+            var dest = new SKBitmap(source.Width, source.Height, source.ColorType, source.AlphaType);
+            using var canvas = new SKCanvas(dest);
+            canvas.Scale(-1, 1);
+            canvas.Translate(-source.Width, 0);
+            canvas.DrawBitmap(source, 0, 0);
+            return dest;
         }
 
-        #endregion 上下翻转
+        /// <summary>
+        /// 垂直翻转图片
+        /// </summary>
+        /// <param name="source"></param>
+        /// <returns></returns>
+        public static SKBitmap FlipVertical(this SKBitmap source)
+        {
+            var dest = new SKBitmap(source.Width, source.Height, source.ColorType, source.AlphaType);
+            using var canvas = new SKCanvas(dest);
+            canvas.Scale(1, -1);
+            canvas.Translate(0, -source.Height);
+            canvas.DrawBitmap(source, 0, 0, new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+            return dest;
+        }
 
         #region 灰度化
 
-        /// <summary>
-        /// 色彩灰度化
-        /// </summary>
-        /// <param name="c">输入颜色</param>
-        /// <returns>输出颜色</returns>
-        public static Color Gray(this Color c)
+        public static SKColor Gray(this SKColor c)
         {
-            var pixel = c.ToPixel<Rgba32>();
-            byte rgb = Convert.ToByte(0.3 * pixel.R + 0.59 * pixel.G + 0.11 * pixel.B);
-            return Color.FromRgb(rgb, rgb, rgb);
+            byte rgb = Convert.ToByte(0.3 * c.Red + 0.59 * c.Green + 0.11 * c.Blue);
+            return new SKColor(rgb, rgb, rgb, c.Alpha);
         }
 
-        /// <summary>
-        /// 色彩灰度化
-        /// </summary>
-        /// <param name="c">输入颜色</param>
-        /// <returns>输出颜色</returns>
-        public static Color Reverse(this Color c)
+        public static SKColor Reverse(this SKColor c)
         {
-            var pixel = c.ToPixel<Rgba32>();
-            byte w = 255;
-            return Color.FromRgba((byte)(w - pixel.R), (byte)(w - pixel.G), (byte)(w - pixel.B), pixel.A);
+            return new SKColor((byte)(255 - c.Red), (byte)(255 - c.Green), (byte)(255 - c.Blue), c.Alpha);
         }
 
-        #endregion 灰度化
+        #endregion
 
         #region 转换为黑白图片
 
-        /// <summary>
-        /// 转换为黑白图片
-        /// </summary>
-        /// <param name="source">要进行处理的图片</param>
-        /// <param name="width">图片的长度</param>
-        /// <param name="height">图片的高度</param>
-        public static Image BWPic(this Image source, int width, int height)
+        public static SKBitmap BWPic(this SKBitmap source, int width, int height)
         {
-            source.Mutate(c => c.Resize(new ResizeOptions()
+            var imageInfo = new SKImageInfo(width, height, SKColorType.Gray8, SKAlphaType.Opaque);
+            var resized = new SKBitmap(imageInfo);
+            source.ScalePixels(resized, new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+            // 二值化
+            for (int x = 0; x < resized.Width; x++)
             {
-                Size = new Size
+                for (int y = 0; y < resized.Height; y++)
                 {
-                    Width = width,
-                    Height = height
-                },
-                Mode = ResizeMode.Pad,
-                Sampler = new BicubicResampler()
-            }).BlackWhite());
-            return source;
+                    var pixel = resized.GetPixel(x, y);
+                    resized.SetPixel(x, y, pixel.Red > 128 ? SKColors.White : SKColors.Black);
+                }
+            }
+            return resized;
         }
 
-        #endregion 转换为黑白图片
+        #endregion
 
         #region 获取图片中的各帧
 
-        /// <summary>
-        /// 获取gif图片中的各帧
-        /// </summary>
-        /// <param name="gif">源gif</param>
-        /// <param name="pSavedPath">保存路径</param>
-        public static void GetFrames(this Image gif, string pSavedPath)
+        public static void GetFrames(this SKBitmap gif, string pSavedPath)
         {
-            for (var i = 0; i < gif.Frames.Count; i++)
+            // SKBitmap is for a single frame; for GIF frames use SKCodec
+            gif.Save(pSavedPath + "\\frame_0.jpg", SKEncodedImageFormat.Jpeg, 90);
+        }
+
+        public static void GetFrames(this SKCodec codec, string pSavedPath)
+        {
+            for (var i = 0; i < codec.FrameCount; i++)
             {
-                gif.Frames.ExportFrame(i).Save(pSavedPath + "\\frame_" + i + ".jpg");
+                var info = codec.Info.WithColorType(SKColorType.Rgba8888);
+                var frameBitmap = new SKBitmap(info);
+                codec.GetPixels(info, frameBitmap.GetPixels(), new SKCodecOptions(i));
+                frameBitmap.Save(pSavedPath + "\\frame_" + i + ".jpg", SKEncodedImageFormat.Jpeg, 90);
             }
         }
 
-        #endregion 获取图片中的各帧
+        #endregion
 
-        /// <summary>
-        /// 将dataUri保存为图片
-        /// </summary>
-        /// <param name="source">dataUri数据源</param>
-        /// <returns></returns>
-        /// <exception cref="Exception">操作失败。</exception>
-        public static Image SaveDataUriAsImageFile(this string source)
+        public static SKBitmap SaveDataUriAsImageFile(this string source)
         {
             string strbase64 = source.Substring(source.IndexOf(',') + 1).Trim('\0');
             byte[] arr = Convert.FromBase64String(strbase64);
             var ms = new PooledMemoryStream(arr);
-            return Image.Load(ms);
+            return SKBitmap.Decode(ms);
         }
+
+        public static void Save(this SKBitmap bitmap, string path, SKEncodedImageFormat format, int quality)
+        {
+            using var data = bitmap.Encode(format, quality);
+            using var fs = File.OpenWrite(path);
+            data.SaveTo(fs);
+        }
+
+        private static byte Clamp(int value)
+        {
+            if (value < 0) return 0;
+            if (value > 255) return 255;
+            return (byte)value;
+        }
+    }
+
+    /// <summary>
+    /// 缩放模式
+    /// </summary>
+    public enum ResizeMode
+    {
+        Stretch,
+        Crop,
+        Min,
+        Max,
+        Pad,
+        BoxPad,
     }
 }

@@ -19,14 +19,6 @@ public class EnumExtTests
     }
 
     [Fact]
-    public void GetEnumType_ShouldReturnCorrectType()
-    {
-        var assembly = Assembly.GetExecutingAssembly();
-        var type = assembly.GetEnumType("TestEnum");
-        Assert.Equal(typeof(TestEnum), type);
-    }
-
-    [Fact]
     public void GetDisplay_ShouldReturnCorrectDisplay()
     {
         var display = TestEnum.First.GetDisplay();

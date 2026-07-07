@@ -1,7 +1,6 @@
 ﻿using System;
 using Masuit.Tools.Media;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 using Xunit;
 
 namespace Masuit.Tools.Abstractions.Test.Media;
@@ -18,7 +17,7 @@ public class ImageHasherTests
     [Fact]
     public void AverageHash64_ShouldReturnCorrectHash()
     {
-        using var image = new Image<Rgba32>(8, 8);
+        using var image = new SKBitmap(8, 8);
         var hash = _imageHasher.AverageHash64(image);
         Assert.Equal(0UL, hash);
     }
@@ -26,7 +25,7 @@ public class ImageHasherTests
     [Fact]
     public void MedianHash64_ShouldReturnCorrectHash()
     {
-        using var image = new Image<Rgba32>(8, 8);
+        using var image = new SKBitmap(8, 8);
         var hash = _imageHasher.MedianHash64(image);
         Assert.Equal(0UL, hash);
     }
@@ -34,7 +33,7 @@ public class ImageHasherTests
     [Fact]
     public void MedianHash256_ShouldReturnCorrectHash()
     {
-        using var image = new Image<Rgba32>(16, 16);
+        using var image = new SKBitmap(16, 16);
         var hash = _imageHasher.MedianHash256(image);
         Assert.NotNull(hash);
         Assert.Equal(4, hash.Length);
@@ -43,7 +42,7 @@ public class ImageHasherTests
     [Fact]
     public void DifferenceHash64_ShouldReturnCorrectHash()
     {
-        using var image = new Image<Rgba32>(9, 8);
+        using var image = new SKBitmap(9, 8);
         var hash = _imageHasher.DifferenceHash64(image);
         Assert.Equal(0UL, hash);
     }
@@ -51,7 +50,7 @@ public class ImageHasherTests
     [Fact]
     public void DifferenceHash256_ShouldReturnCorrectHash()
     {
-        using var image = new Image<Rgba32>(17, 16);
+        using var image = new SKBitmap(17, 16);
         var hash = _imageHasher.DifferenceHash256(image);
         Assert.NotNull(hash);
         Assert.Equal(4, hash.Length);

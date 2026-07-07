@@ -575,6 +575,8 @@ public static class IDictionaryExtensions
         return @this.TryAdd(key, addValue) ? addValue : @this[key];
     }
 
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> CacheLocks = new();
+
     /// <summary>
     /// 获取或添加
     /// </summary>
@@ -585,12 +587,35 @@ public static class IDictionaryExtensions
     /// <param name="addValueFactory"></param>
     public static async Task<TValue> GetOrAddAsync<TKey, TValue>(this IDictionary<TKey, TValue> @this, TKey key, Func<Task<TValue>> addValueFactory)
     {
-        if (!@this.ContainsKey(key))
+        var semaphore = CacheLocks.GetOrAdd(key.ToString(), _ => new SemaphoreSlim(1, 1));
+        if (@this.TryGetValue(key, out TValue value))
         {
-            @this[key] = await addValueFactory();
+            return value;
         }
 
-        return @this[key];
+        await semaphore.WaitAsync();
+        try
+        {
+            // 双重检查：锁内再次确认缓存，防止锁等待期间已创建值
+            if (@this.TryGetValue(key, out value))
+            {
+                return value;
+            }
+
+            value = await addValueFactory();
+            @this[key] = value;
+            return value;
+        }
+        finally
+        {
+            semaphore.Release();
+            // 清理闲置锁
+            if (semaphore.CurrentCount == 1)
+            {
+                CacheLocks.TryRemove(key.ToString(), out _);
+                semaphore.Dispose();
+            }
+        }
     }
 
     private static bool TryAdd<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, TValue value) where TKey : notnull

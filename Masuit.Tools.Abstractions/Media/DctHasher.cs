@@ -1,9 +1,6 @@
 ﻿using System.Numerics;
 using System.Runtime.CompilerServices;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
-using SixLabors.ImageSharp.Processing.Processors.Transforms;
+using SkiaSharp;
 
 namespace Masuit.Tools.Media;
 
@@ -12,37 +9,52 @@ internal static class DctHasher
     private const int Size = 64;
     private static readonly double Sqrt2DivSize = Math.Sqrt(2D / Size);
     private static readonly double Sqrt2 = 1 / Math.Sqrt(2);
-    private static readonly List<Vector<double>>[] DctCoeffsSimd = GenerateDctCoeffsSIMD();
+    private static readonly int VectorStride = Vector<double>.Count;
+    private static readonly int VectorCount = Size / Vector<double>.Count;
+    // 预计算 DCT 系数，改用 Vector<double>[][] 避免每次调用创建 List<T>
+    private static readonly Vector<double>[][] DctCoeffsSimd = GenerateDctCoeffsSIMD();
 
-    public static ulong Compute(Image<L8> image)
+    // 每线程复用的向量缓冲，避免每次 Dct1D_SIMD 调用分配 List
+    [ThreadStatic]
+    private static Vector<double>[]? _valuesBuffer;
+
+    public static ulong Compute(SKBitmap image)
     {
         if (image == null)
         {
             throw new ArgumentNullException(nameof(image));
         }
 
-        using var clone = image.Clone(ctx => ctx.Resize(new ResizeOptions()
-        {
-            Size = new Size
-            {
-                Width = Size,
-                Height = Size
-            },
-            Mode = ResizeMode.Stretch,
-            Sampler = new BicubicResampler()
-        }));
+        var imageInfo = new SKImageInfo(Size, Size, SKColorType.Gray8, SKAlphaType.Opaque);
+        using var surface = SKSurface.Create(imageInfo);
+        var canvas = surface.Canvas;
+        canvas.Clear(SKColors.Transparent);
+
+        // 源图片完整矩形
+        var sourceRect = new SKRect(0, 0, image.Width, image.Height);
+        var destRect = new SKRect(0, 0, Size, Size);
+
+        // 绘制：不做比例适配，直接拉伸填充
+        canvas.DrawBitmap(image, sourceRect, destRect, new SKSamplingOptions(SKFilterMode.Linear));
         var rows = new double[Size, Size];
         var sequence = new double[Size];
         var matrix = new double[Size, Size];
 
-        for (var y = 0; y < Size; y++)
+        // 用不安全指针直接读取 Gray8 像素，替代 4096 次 GetPixel() 互操作调用
+        unsafe
         {
-            for (var x = 0; x < Size; x++)
+            using var pixels = surface.PeekPixels();
+            var ptr = (byte*)pixels.GetPixels().ToPointer();
+            for (var y = 0; y < Size; y++)
             {
-                sequence[x] = clone[x, y].PackedValue;
-            }
+                var rowPtr = ptr + y * Size;
+                for (var x = 0; x < Size; x++)
+                {
+                    sequence[x] = rowPtr[x];
+                }
 
-            Dct1D_SIMD(sequence, rows, y);
+                Dct1D_SIMD(sequence, rows, y);
+            }
         }
 
         for (var x = 0; x < 8; x++)
@@ -82,14 +94,20 @@ internal static class DctHasher
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static double CalculateMedian64(IReadOnlyCollection<double> values)
+    private static double CalculateMedian64(double[] values)
     {
-        return values.OrderBy(x => x).Skip(31).Take(2).Average();
+        // 用数组拷贝+Array.Sort替代LINQ OrderBy，避免IEnumerable枚举器分配
+        var copy = new double[64];
+        Array.Copy(values, copy, 64);
+        Array.Sort(copy);
+        return (copy[31] + copy[32]) / 2.0;
     }
 
-    private static List<Vector<double>>[] GenerateDctCoeffsSIMD()
+    private static Vector<double>[][] GenerateDctCoeffsSIMD()
     {
-        var results = new List<Vector<double>>[Size];
+        var stride = Vector<double>.Count;
+        var vectorCount = Size / stride;
+        var results = new Vector<double>[Size][];
         for (var coef = 0; coef < Size; coef++)
         {
             var singleResultRaw = new double[Size];
@@ -98,15 +116,13 @@ internal static class DctHasher
                 singleResultRaw[i] = Math.Cos(((2.0 * i) + 1.0) * coef * Math.PI / (2.0 * Size));
             }
 
-            var singleResultList = new List<Vector<double>>();
-            var stride = Vector<double>.Count;
-            for (var i = 0; i < Size; i += stride)
+            var vectors = new Vector<double>[vectorCount];
+            for (var i = 0; i < vectorCount; i++)
             {
-                var v = new Vector<double>(singleResultRaw, i);
-                singleResultList.Add(v);
+                vectors[i] = new Vector<double>(singleResultRaw, i * stride);
             }
 
-            results[coef] = singleResultList;
+            results[coef] = vectors;
         }
 
         return results;
@@ -115,21 +131,24 @@ internal static class DctHasher
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void Dct1D_SIMD(double[] valuesRaw, double[,] coefficients, int ci, int limit = Size)
     {
-        var valuesList = new List<Vector<double>>();
-        var stride = Vector<double>.Count;
-        for (var i = 0; i < valuesRaw.Length; i += stride)
+        // 复用线程本地缓冲，避免每次调用创建新的 List<Vector<double>>
+        var buf = _valuesBuffer ??= new Vector<double>[VectorCount];
+        for (var i = 0; i < VectorCount; i++)
         {
-            valuesList.Add(new Vector<double>(valuesRaw, i));
+            buf[i] = new Vector<double>(valuesRaw, i * VectorStride);
         }
 
+        var dctCoeffs = DctCoeffsSimd;
         for (var coef = 0; coef < limit; coef++)
         {
-            for (var i = 0; i < valuesList.Count; i++)
+            var coeffVecs = dctCoeffs[coef];
+            double sum = 0;
+            for (var i = 0; i < VectorCount; i++)
             {
-                coefficients[ci, coef] += Vector.Dot(valuesList[i], DctCoeffsSimd[coef][i]);
+                sum += Vector.Dot(buf[i], coeffVecs[i]);
             }
 
-            coefficients[ci, coef] *= Sqrt2DivSize;
+            coefficients[ci, coef] = sum * Sqrt2DivSize;
             if (coef == 0)
             {
                 coefficients[ci, coef] *= Sqrt2;

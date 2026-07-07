@@ -1,7 +1,6 @@
 ﻿using System.Text;
 using System.Text.RegularExpressions;
 using AngleSharp.Text;
-using SixLabors.ImageSharp.Drawing;
 
 namespace Masuit.Tools.TextDiff;
 

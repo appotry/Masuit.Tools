@@ -1,25 +1,23 @@
 ﻿using System;
 using System.IO;
 using Masuit.Tools.Media;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 using Xunit;
 
 namespace Masuit.Tools.Abstractions.Test.Media;
 
 public class ImageBorderRemoverTests
 {
-    private Image<Rgba32> CreateTestImage(int width, int height, Rgba32 borderColor, int borderSize = 5)
+    private SKBitmap CreateTestImage(int width, int height, SKColor borderColor, int borderSize = 5)
     {
-        var image = new Image<Rgba32>(width, height);
-        // 填充边框
+        var image = new SKBitmap(width, height);
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++)
             {
                 if (x < borderSize || x >= width - borderSize || y < borderSize || y >= height - borderSize)
-                    image[x, y] = borderColor;
+                    image.SetPixel(x, y, borderColor);
                 else
-                    image[x, y] = new Rgba32(Random.Shared.Next(255), Random.Shared.Next(255), Random.Shared.Next(255));
+                    image.SetPixel(x, y, new SKColor((byte)Random.Shared.Next(255), (byte)Random.Shared.Next(255), (byte)Random.Shared.Next(255)));
             }
         return image;
     }
@@ -28,7 +26,7 @@ public class ImageBorderRemoverTests
     public void DetectBorders_ImageObject_ShouldDetectBorder()
     {
         var remover = new ImageBorderRemover(ToleranceMode.Channel);
-        using var image = CreateTestImage(30, 30, new Rgba32(255, 0, 0), 3);
+        using var image = CreateTestImage(30, 30, new SKColor(255, 0, 0), 3);
 
         var result = remover.DetectBorders(image, 10);
 
@@ -39,14 +37,14 @@ public class ImageBorderRemoverTests
     public void RemoveBorders_Stream_ShouldReturnCroppedStream()
     {
         var remover = new ImageBorderRemover(ToleranceMode.Channel);
-        using var image = CreateTestImage(60, 60, new Rgba32(255, 0, 0), 6);
+        using var image = CreateTestImage(60, 60, new SKColor(255, 0, 0), 6);
         using var ms = new MemoryStream();
-        image.SaveAsPng(ms);
+        using (var data = image.Encode(SKEncodedImageFormat.Png, 90)) data.SaveTo(ms);
         ms.Position = 0;
 
         using var resultStream = remover.RemoveBorders(ms, 0);
         resultStream.Position = 0;
-        using var cropped = Image.Load<Rgba32>(resultStream);
+        using var cropped = SKBitmap.Decode(resultStream);
 
         Assert.True(48 >= cropped.Width);
         Assert.True(48 >= cropped.Height);

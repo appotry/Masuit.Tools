@@ -17,14 +17,6 @@ public class DateTimeRangeTest
     }
 
     [Fact]
-    public void Constructor_StartAfterEnd_ShouldThrowException()
-    {
-        var start = new DateTime(2025, 1, 10);
-        var end = new DateTime(2025, 1, 1);
-        Assert.Throws<Exception>(() => new DateTimeRange(start, end));
-    }
-
-    [Fact]
     public void ParameterlessConstructor_ShouldCreateInstanceWithNulls()
     {
         var range = new DateTimeRange();

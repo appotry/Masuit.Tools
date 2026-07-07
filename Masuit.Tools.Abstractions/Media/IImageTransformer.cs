@@ -1,6 +1,5 @@
 ﻿using System.IO;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 
 namespace Masuit.Tools.Media;
 
@@ -25,7 +24,7 @@ public interface IImageTransformer
     /// <param name="width">给定宽度</param>
     /// <param name="height">给定高度</param>
     /// <returns>包含转换图像的8位像素值的字节数组。</returns>
-    byte[] TransformImage(Image<L8> image, int width, int height);
+    byte[] TransformImage(SKBitmap image, int width, int height);
 
-    public byte[,] GetPixelData(Image<L8> image, int width, int height);
+    public byte[,] GetPixelData(SKBitmap image, int width, int height);
 }

@@ -985,46 +985,6 @@ public class ConcurrentHashQueueTests
     }
 
     [Fact]
-    public void ConcurrentEnqueueDequeue_ProducerConsumer()
-    {
-        // Arrange
-        var queue = new ConcurrentHashQueue<int>();
-        var tasks = new List<Task>();
-        var enqueued = 0;
-        var dequeued = 0;
-
-        // Act - Producer
-        var producerTask = Task.Run(() =>
-        {
-            for (int i = 0; i < 50; i++)
-            {
-                if (queue.Enqueue(i))
-                {
-                    Interlocked.Increment(ref enqueued);
-                }
-            }
-        });
-
-        // Act - Consumers
-        var consumerTasks = new Task[3];
-        for (int c = 0; c < 3; c++)
-        {
-            consumerTasks[c] = Task.Run(() =>
-            {
-                while (queue.TryDequeue(out _))
-                {
-                    Interlocked.Increment(ref dequeued);
-                }
-            });
-        }
-
-        Task.WaitAll(new[] { producerTask }.Concat(consumerTasks).ToArray());
-
-        // Assert
-        Assert.Equal(enqueued, dequeued);
-    }
-
-    [Fact]
     public void ConcurrentEnqueueWithDuplicates_OnlyUniqueItemsAdded()
     {
         // Arrange

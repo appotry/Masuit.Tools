@@ -2,7 +2,6 @@
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
 using OfficeOpenXml.Table;
-using SixLabors.Fonts;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -364,15 +363,10 @@ public static class ExcelExtension
                                     else
                                     {
                                         // 根据单元格内容长度来自适应调整列宽
-                                        var fontFamily = SystemFonts.Families.FirstOrDefault(f => f.Name == sheet.Cells[i + startRow + 1, j + startColumn].Style.Font.Name);
-                                        int measureSize = 1;
-                                        if (fontFamily == default)
-                                        {
-                                            fontFamily = SystemFonts.Families.FirstOrDefault();
-                                            measureSize++;
-                                        }
-
-                                        var width = TextMeasurer.MeasureSize(table.Rows[i][j].ToString(), new TextOptions(fontFamily.CreateFont(measureSize))).Width;
+                                        var cellFontName1 = sheet.Cells[i + startRow + 1, j + startColumn].Style.Font.Name;
+                                        using var tf1 = SkiaSharp.SKTypeface.FromFamilyName(cellFontName1) ?? SkiaSharp.SKTypeface.Default;
+                                        using var font1 = new SkiaSharp.SKFont(tf1, 11f);
+                                        var width = font1.MeasureText(table.Rows[i][j].ToString()) / 7f;
                                         sheet.Column(j + startColumn).Width = Math.Min(110, Math.Max(width, sheet.Column(j + startColumn).Width));
                                     }
 
@@ -597,15 +591,10 @@ public static class ExcelExtension
                                     else
                                     {
                                         // 根据单元格内容长度来自适应调整列宽
-                                        var fontFamily = SystemFonts.Families.FirstOrDefault(f => f.Name == sheet.Cells[current + startRow + 1, j + startColumn].Style.Font.Name);
-                                        int measureSize = 1;
-                                        if (fontFamily == default)
-                                        {
-                                            fontFamily = SystemFonts.Families.FirstOrDefault();
-                                            measureSize++;
-                                        }
-
-                                        var width = TextMeasurer.MeasureSize(properties[j].GetValue(item).ToString(), new TextOptions(fontFamily.CreateFont(measureSize))).Width;
+                                        var cellFontName2 = sheet.Cells[current + startRow + 1, j + startColumn].Style.Font.Name;
+                                        using var tf2 = SkiaSharp.SKTypeface.FromFamilyName(cellFontName2) ?? SkiaSharp.SKTypeface.Default;
+                                        using var font2 = new SkiaSharp.SKFont(tf2, 11f);
+                                        var width = font2.MeasureText(properties[j].GetValue(item).ToString()) / 7f;
                                         sheet.Column(j + startColumn).Width = Math.Min(110, Math.Max(width, sheet.Column(j + startColumn).Width));
                                     }
 

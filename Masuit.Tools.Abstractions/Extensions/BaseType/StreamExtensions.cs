@@ -7,9 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 
 #if NET5_0_OR_GREATER
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using System;
 using System.Buffers;
 using System.Runtime.InteropServices;
 #endif
@@ -358,9 +355,10 @@ public static class StreamExtensions
         return bytes;
     }
 
-    public static Image<Rgba32> AsImage(this Stream stream)
+    public static SkiaSharp.SKBitmap AsImage(this Stream stream)
     {
-        return Image.Load<Rgba32>(stream);
+        using var codec=SkiaSharp.SKCodec.Create(stream);
+        return SkiaSharp.SKBitmap.Decode(codec);
     }
 
 #endif
