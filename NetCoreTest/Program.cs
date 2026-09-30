@@ -1,4 +1,5 @@
 using Masuit.Tools.AspNetCore.ModelBinder;
+using SharpCompress.IO;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
